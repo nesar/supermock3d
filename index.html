@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>The SuperMock synthetic sky from HACC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: dark;
+    --void: #04050a;
+    --panel: rgba(8, 10, 20, 0.84);
+    --edge: #2c3142;
+    --ink: #eef0f4;
+    --dim: #9aa0b4;
+    --rose: #ef476f;
+    --gold: #d9c467;
+    --teal: #63d2c9;
+    --display: "Rajdhani", "Segoe UI", -apple-system, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --body: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  html, body { margin: 0; height: 100%; background: var(--void); overflow: hidden; font-family: var(--body); }
+  canvas#c { display: block; width: 100%; height: 100%; }
+
+  #hud { position: fixed; inset: 0; pointer-events: none; color: var(--ink); }
+  #hud .panel { pointer-events: auto; background: var(--panel); border: 1px solid var(--edge);
+                border-radius: 3px; padding: 14px 16px; backdrop-filter: blur(4px); }
+
+  #title-block { position: absolute; top: 16px; left: 16px; width: 232px; border-left: 2px solid var(--rose); }
+  #title-block h1 { margin: 0 0 5px; font-family: var(--display); font-size: 19px; line-height: 1.2; font-weight: 700;
+                     letter-spacing: 0.3px; text-wrap: balance; }
+  #title-block p { margin: 0; font-size: 12.5px; color: var(--dim); line-height: 1.55; }
+  #title-block code { font-family: var(--mono); font-size: 11px; color: var(--ink); }
+  #stat-row { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--edge);
+              font-family: var(--mono); font-variant-numeric: tabular-nums;
+              font-size: 11.5px; color: var(--dim); display: flex; flex-wrap: wrap; gap: 5px 16px; }
+  #stat-row b { color: var(--teal); font-weight: 500; }
+
+  #controls { font-size: 12px; }
+  #controls h2 { margin: 0 0 9px; font-family: var(--display); font-size: 12.5px; font-weight: 600;
+                 text-transform: uppercase; letter-spacing: 1px; color: var(--dim); }
+  #controls .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 0; }
+  #controls input[type="range"] { flex: 1; accent-color: var(--rose); }
+  #controls button { font-family: var(--display); font-weight: 600; letter-spacing: 0.3px;
+                      background: #161b2c; color: var(--ink); border: 1px solid var(--edge); border-radius: 3px;
+                      padding: 6px 12px; font-size: 12.5px; cursor: pointer; }
+  #controls .row--buttons button { flex: 1; padding-left: 6px; padding-right: 6px; white-space: nowrap; }
+  #controls button:hover { background: #1f2740; border-color: var(--rose); }
+  #controls button:focus-visible, #info-btn:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+  #controls label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+
+  #left-dock { position: absolute; bottom: 16px; left: 16px; width: 232px; display: flex; flex-direction: column; gap: 10px; }
+  #hud #help { font-size: 11px; color: var(--dim); line-height: 1.55; padding: 8px 10px; }
+  #help b { font-family: var(--mono); color: var(--gold); font-weight: 500; }
+
+  #telescope-panel { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); text-align: center; }
+  #telescope-switch { display: flex; gap: 6px; justify-content: center; }
+  #telescope-switch button { font-family: var(--display); font-weight: 600; letter-spacing: 0.5px;
+                              background: #161b2c; color: var(--dim); border: 1px solid var(--edge);
+                              border-radius: 3px; padding: 7px 15px; font-size: 12.5px; cursor: pointer; }
+  #telescope-switch button:hover { border-color: var(--teal); color: var(--ink); }
+  #telescope-switch button.active { background: var(--rose); color: #1a0610; border-color: var(--rose); }
+  #telescope-switch button:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+  #telescope-spec { margin-top: 9px; font-family: var(--mono); font-size: 11px; color: var(--dim);
+                     white-space: nowrap; }
+
+  #info-btn { position: absolute; top: 16px; right: 16px; font-family: var(--display); font-weight: 600;
+              letter-spacing: 0.3px; background: #161b2c; color: var(--ink); border: 1px solid var(--edge);
+              border-radius: 3px; padding: 8px 14px; font-size: 12.5px; cursor: pointer; }
+  #info-btn:hover { border-color: var(--teal); }
+  #info-panel { position: absolute; top: 58px; right: 16px; max-width: 380px; font-size: 12.5px; line-height: 1.55; }
+  #info-panel h2 { margin: 0 0 9px; font-family: var(--display); font-size: 14px; font-weight: 600; }
+  #info-panel ul { margin: 6px 0 0; padding-left: 18px; }
+  #info-panel li { margin-bottom: 7px; }
+  #info-panel b { color: var(--teal); }
+  #info-panel a { color: var(--gold); text-decoration: none; border-bottom: 1px dotted var(--gold); }
+  #info-panel a:hover { color: var(--ink); }
+
+  #mw-label { position: absolute; transform: translate(-50%, -100%); font-family: var(--mono); font-size: 11px;
+              color: #fff; text-shadow: 0 0 4px #000, 0 0 8px #000; white-space: nowrap; pointer-events: none; }
+
+  .coord-label { position: absolute; transform: translate(-50%, -50%); font-family: var(--mono);
+                 font-size: 10.5px; white-space: nowrap; pointer-events: none;
+                 text-shadow: 0 0 4px #000, 0 0 8px #000; }
+  .coord-label--z { color: var(--teal); }
+  .coord-label--radec { color: var(--gold); }
+
+  /* ---- click-to-inspect ---- */
+  #hover-ring, #select-ring { position: absolute; transform: translate(-50%, -50%); border-radius: 50%;
+                              pointer-events: none; box-sizing: border-box; }
+  #hover-ring { width: 22px; height: 22px; border: 1px solid rgba(217, 196, 103, 0.7); }
+  #select-ring { width: 28px; height: 28px; border: 2px solid var(--rose); box-shadow: 0 0 10px rgba(239, 71, 111, 0.6); }
+  #detail-panel { position: absolute; top: 58px; right: 16px; width: 400px; max-width: calc(100vw - 32px); max-height: calc(100vh - 80px);
+                  overflow-y: auto; font-size: 12px; line-height: 1.5; scrollbar-width: thin; }
+  #detail-panel .detail-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+                                margin-bottom: 8px; border-bottom: 1px solid var(--edge); padding-bottom: 7px; }
+  #detail-panel .detail-title { font-family: var(--display); font-size: 16px; font-weight: 700; letter-spacing: 0.3px; }
+  #detail-panel .detail-sub { font-family: var(--mono); font-size: 10.5px; color: var(--dim); }
+  #detail-panel .close-btn { background: none; border: 1px solid var(--edge); color: var(--dim); border-radius: 3px;
+                             font-size: 13px; line-height: 1; padding: 3px 7px; cursor: pointer; }
+  #detail-panel .close-btn:hover { color: var(--ink); border-color: var(--rose); }
+  .detail-loading { color: var(--dim); font-family: var(--mono); padding: 10px 0; }
+  .detail-grid { display: grid; grid-template-columns: 78px 1fr; gap: 3px 10px; margin: 0; font-family: var(--mono);
+                 font-size: 11px; font-variant-numeric: tabular-nums; }
+  .detail-grid dt { color: var(--dim); }
+  .detail-grid dd { margin: 0; color: var(--ink); }
+  .detail-sec { margin: 14px 0 6px; display: flex; flex-direction: column; gap: 1px; }
+  .detail-sec h3 { margin: 0; font-family: var(--display); font-size: 12.5px; font-weight: 600;
+                   text-transform: uppercase; letter-spacing: 1px; color: var(--teal); }
+  .detail-sec span { font-size: 11px; color: var(--dim); }
+  .closer-row { display: flex; gap: 8px; }
+  .closer-cell { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .closer-cell canvas { width: 100%; aspect-ratio: 1; border-radius: 2px; border: 1px solid var(--edge); }
+  .closer-cell b { font-family: var(--display); font-size: 12px; font-weight: 600; margin-top: 3px; }
+  .closer-cell span { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+  .closer-cap { font-family: var(--mono); font-size: 10.5px; color: var(--dim); margin-top: 6px; }
+  .chart-wrap { position: relative; width: 100%; border-radius: 3px; overflow: hidden; }
+  .chart-wrap canvas { display: block; }
+  .chart-tip { position: absolute; background: rgba(8, 10, 20, 0.92); border: 1px solid var(--edge); border-radius: 3px;
+               padding: 3px 7px; font-family: var(--mono); font-size: 10.5px; color: var(--ink); white-space: nowrap;
+               pointer-events: none; }
+  .detail-foot { margin: 12px 0 0; font-size: 11px; color: var(--dim); }
+  #pick-hint b { color: var(--gold); }
+  #detail-panel sub, #detail-panel sup, #controls sub { font-size: 0.72em; line-height: 0; position: relative; vertical-align: baseline; }
+  #detail-panel sub, #controls sub { top: 0.35em; }
+  #detail-panel sup { top: -0.55em; }
+
+  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+             background: var(--void); color: var(--ink); font-family: var(--display); font-weight: 600;
+             font-size: 16px; letter-spacing: 0.4px; z-index: 10; text-align: center; padding: 20px; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+<div id="loading">loading galaxies…</div>
+<div id="mw-label" class="hidden">Milky Way (observer)</div>
+<div id="hover-ring" class="hidden"></div>
+<div id="select-ring" class="hidden"></div>
+
+<div id="hud">
+  <div id="title-block" class="panel">
+    <h1>The SuperMock synthetic sky from HACC</h1>
+    <p>An interactive 3D flythrough of the Supermock-v3 galaxy dataset based on the
+       Hardware/Hybrid Accelerated Cosmology Code (HACC)-LastJourney dark matter simulation
+       and galaxy-painting pipeline created for SPHEREx analysis.</p>
+    <div id="stat-row">
+      <span><b id="n-count">–</b> / <span id="n-total">–</span> galaxies visible</span>
+      <span>z ≤ <b id="z-range">–</b></span>
+      <span><b id="d-range">–</b></span>
+      <span>logM<sub>*</sub> &gt; <b id="m-min">–</b></span>
+    </div>
+  </div>
+
+  <div id="telescope-panel" class="panel">
+    <div id="telescope-switch">
+      <button data-scope="all">ALL GALAXIES</button>
+      <button data-scope="LSST">LSST</button>
+      <button data-scope="WISE">WISE</button>
+      <button data-scope="SPHEREx">SPHEREx</button>
+    </div>
+    <div id="telescope-spec">–</div>
+  </div>
+
+  <button id="info-btn" class="panel">ⓘ about this view</button>
+  <div id="info-panel" class="panel hidden">
+    <h2>About this view</h2>
+    <ul>
+      <li><b>Source:</b> SuperMock dataset on <span class="area-deg2">–</span>&nbsp;deg² area of the sky
+          (lightcone patch<span class="patch-list"></span>). Catalog consists of a wide number of
+          simulation quantities (from HACC — LastJourney,
+          <a href="https://arxiv.org/abs/2006.01697" target="_blank" rel="noopener">arXiv:2006.01697</a>)
+          like dark matter mass accretion histories and halo masses, along with synthetic observations
+          like narrow-band spectra and photometry. See:
+          <a href="https://github.com/nesar/SuperMockLoad" target="_blank" rel="noopener">github.com/nesar/SuperMockLoad</a>.</li>
+      <li><b>Shapes and sizes:</b> the mock catalog has no morphology, Sersic index or orientation per
+          galaxy. Disk-vs-spheroid type, size and viewing angle are assigned from plausible scaling
+          relations (mass→size, SPHEREx 4.0−1.2&nbsp;µm color→disk/spheroid), then rendered once each
+          into a 16-tile texture atlas with GalSim (Sersic n=1/n=4 profiles, hand-added spiral
+          arm/clump texture, Gaussian PSF) — the same procedural recipe used for the deep-field zoom
+          panel in the static money-plot figures. Sizes of the galaxies are also illustrative. They do
+          not correspond to physical sizes, however the relative sizes are based on the catalog.</li>
+      <li><b>Selections:</b> the visible number density looks roughly uniform along the line of sight even
+          though the true number of galaxies per shell varies by ~4 orders of magnitude. For every
+          <span class="shell-mpc">50</span>&nbsp;Mpc shell, we cap the galaxies to
+          <span class="shell-cap">5000</span>, reducing the visualization of over
+          <span class="n-total-short">70M</span> galaxies to around <span class="n-drawn-short">800K</span>.</li>
+      <li><b>Colors:</b> blue→red tint follows each mock galaxy's SPHEREx mid-IR color
+          (redder = dustier/more quiescent).</li>
+      <li><b>Telescope views:</b> LSST/WISE/SPHEREx buttons use each survey's magnitude against that
+          survey's 5σ depth — a galaxy only appears if it actually clears that depth.</li>
+      <li><b>Credits:</b> this visualization was inspired by
+          <a href="https://knowtheuniverse.com/" target="_blank" rel="noopener">knowtheuniverse.com</a>,
+          which was done on the real data from the 2MASS Redshift Survey. Anthropic Fable-5.1 was
+          utilized in the visualization.</li>
+    </ul>
+  </div>
+
+  <div id="detail-panel" class="panel hidden">
+    <div class="detail-head">
+      <div>
+        <div class="detail-title">galaxy</div>
+        <div class="detail-sub">SPHEREx-detectable · catalog record</div>
+      </div>
+      <button class="close-btn" title="close (Esc)">✕</button>
+    </div>
+    <div class="detail-body"></div>
+  </div>
+
+  <div id="left-dock">
+  <div id="controls" class="panel">
+    <h2>view controls</h2>
+    <div class="row row--buttons"><button id="reset-btn">reset view</button>
+      <button id="observer-btn" title="look out at the sky from the Milky Way">observer view</button></div>
+    <div class="row"><label><input type="checkbox" id="rotate-chk"> auto-rotate</label></div>
+    <div class="row"><label>brightness</label>
+      <input type="range" id="brightness" min="0.3" max="4" step="0.05" value="1.5"></div>
+    <div class="row"><label>point size</label>
+      <input type="range" id="pointsize" min="800" max="9000" step="100" value="3500"></div>
+    <div class="row"><label>max redshift</label>
+      <input type="range" id="zmax-slider" min="0" max="1000" step="1" value="769"></div>
+    <div class="row"><label><input type="checkbox" id="rings-chk"> distance rings</label></div>
+    <div class="row"><label><input type="checkbox" id="labels-chk"> coordinate labels</label></div>
+  </div>
+
+  <div id="help" class="panel">
+    drag to orbit · scroll / pinch to zoom · shift-drag or right-drag to pan<br>
+    <span id="pick-hint" class="hidden"><b>click a galaxy</b> to inspect it · <span id="n-pickable">–</span> SPHEREx-detectable galaxies carry full records<br></span>
+    <b>generated <span id="gen-date">–</span></b> · SPHEREx Mocks_v3, patch<span class="patch-list"></span>
+  </div>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
