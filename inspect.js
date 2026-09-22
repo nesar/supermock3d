@@ -14,6 +14,7 @@ attribute float aMagLSST;
 attribute float aMagWISE;
 attribute float aMagSPX;
 attribute float aRedshift;
+attribute float aDistReal;
 varying vec3 vId;
 varying float vVisible;
 uniform float uPixelRatio;
@@ -23,11 +24,16 @@ uniform float uDepthLSST;
 uniform float uDepthWISE;
 uniform float uDepthSPX;
 uniform float uZMax;
+uniform float uDistMax;
+uniform float uRSD;
 uniform float uMinPx;
 void main() {
   float sizeFactor = aSize;
-  // inspectable = drawn under the current cut AND SPHEREx-detectable
-  float visible = (aRedshift <= uZMax && aMagSPX < uDepthSPX) ? 1.0 : 0.0;
+  // inspectable = drawn under the current cut AND SPHEREx-detectable;
+  // position/cut follow the main shader's peculiar-velocity toggle
+  bool inCut = uRSD > 0.5 ? (aRedshift <= uZMax) : (aDistReal <= uDistMax);
+  float visible = (inCut && aMagSPX < uDepthSPX) ? 1.0 : 0.0;
+  vec3 pos = uRSD > 0.5 ? position : normalize(position) * aDistReal;
   if (visible > 0.5 && uTelescope > 0.5) {
     float mag, depth;
     if (uTelescope < 1.5) { mag = aMagLSST; depth = uDepthLSST; }
@@ -39,7 +45,7 @@ void main() {
   vVisible = visible;
   float id = aIndex + 1.0;
   vId = vec3(floor(id / 65536.0), floor(mod(id, 65536.0) / 256.0), mod(id, 256.0)) / 255.0;
-  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+  vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
   float persp = uSizeScale * uPixelRatio / max(-mvPosition.z, 0.05);
   gl_PointSize = clamp(max(sizeFactor * persp * 0.6, uMinPx), 1.0, 220.0);
   gl_Position = visible > 0.5 ? projectionMatrix * mvPosition : vec4(0.0, 0.0, 2.0, 1.0);
@@ -182,6 +188,7 @@ export async function setupInspector(THREE, ctx) {
     uniforms: {
       uPixelRatio: mu.uPixelRatio, uSizeScale: mu.uSizeScale, uTelescope: mu.uTelescope,
       uDepthLSST: mu.uDepthLSST, uDepthWISE: mu.uDepthWISE, uDepthSPX: mu.uDepthSPX, uZMax: mu.uZMax,
+      uDistMax: mu.uDistMax, uRSD: mu.uRSD,
       uMinPx: { value: 9.0 },
     },
     vertexShader: PICK_VERT, fragmentShader: PICK_FRAG,
@@ -237,7 +244,8 @@ export async function setupInspector(THREE, ctx) {
 
   function placeRing(el, idx) {
     if (idx < 0) { el.classList.add('hidden'); return; }
-    tmp.set(posAttr[3 * idx], posAttr[3 * idx + 1], posAttr[3 * idx + 2]);
+    if (ctx.posOf) ctx.posOf(idx, tmp);
+    else tmp.set(posAttr[3 * idx], posAttr[3 * idx + 1], posAttr[3 * idx + 2]);
     projVec.copy(tmp).project(camera);
     if (projVec.z >= 1) { el.classList.add('hidden'); return; }
     el.style.left = `${(projVec.x * 0.5 + 0.5) * window.innerWidth}px`;
@@ -310,7 +318,13 @@ export async function setupInspector(THREE, ctx) {
       grid.append(dt, dd);
     };
     row('RA / Dec', `${fmt.deg(s.ra)}  ${fmt.deg(s.dec)}`);
+    // cosmological redshift: undo the pipeline's relativistic peculiar-velocity term
+    const rr = Math.hypot(s.x, s.y, s.z) || 1;
+    const beta = (s.x * s.vx + s.y * s.vy + s.z * s.vz) / rr / 299792.458;
+    const zCos = Number.isFinite(beta) ? (1 + z) / Math.sqrt((1 + beta) / (1 - beta)) - 1 : NaN;
     row('redshift', `${fmt.z(z)}  (${dC.toFixed(0)} Mpc comoving)`, 'observed redshift incl. peculiar velocity');
+    if (Number.isFinite(zCos)) row('z<sub>cos</sub>', `${fmt.z(zCos)}  ·  v<sub>los</sub> ${beta >= 0 ? '+' : '−'}${Math.abs(beta * 299792.458).toFixed(0)} km s<sup>−1</sup>`,
+      'cosmological redshift (peculiar velocity removed) and line-of-sight peculiar velocity, + = receding');
     row('lookback', `${(ageAtZ(0) - tObs).toFixed(2)} Gyr  ·  age ${tObs.toFixed(2)} Gyr`);
     row('M<sub>★</sub>', `${fmt.logm(s.log_mstar)} M<sub>☉</sub>`, 'stellar mass at the observed epoch (catalog stellar_mass)');
     row('M<sub>halo</sub>', `${fmt.logm(s.log_mhalo_now)} h<sup>−1</sup> M<sub>☉</sub>  (peak ${fmt.logm(s.log_mpeak)})`, 'core halo mass, last MAH step / peak');

@@ -122,6 +122,7 @@ attribute float aMagLSST;
 attribute float aMagWISE;
 attribute float aMagSPX;
 attribute float aRedshift;
+attribute float aDistReal;
 varying vec3 vColor;
 varying float vTile;
 varying float vVisible;
@@ -132,11 +133,18 @@ uniform float uDepthLSST;
 uniform float uDepthWISE;
 uniform float uDepthSPX;
 uniform float uZMax;
+uniform float uDistMax;
+uniform float uRSD;
 void main() {
   vColor = aColor;
   vTile = aTile;
   float sizeFactor = aSize;
-  float visible = aRedshift <= uZMax ? 1.0 : 0.0;
+  // uRSD = 1: observed redshift-space position (peculiar velocity included,
+  // the catalog's own redshift); uRSD = 0: real-space position at the
+  // cosmological redshift, same line of sight. The depth cut follows suit.
+  bool inCut = uRSD > 0.5 ? (aRedshift <= uZMax) : (aDistReal <= uDistMax);
+  float visible = inCut ? 1.0 : 0.0;
+  vec3 pos = uRSD > 0.5 ? position : normalize(position) * aDistReal;
   if (visible > 0.5 && uTelescope > 0.5) {
     float mag, depth;
     if (uTelescope < 1.5) { mag = aMagLSST; depth = uDepthLSST; }
@@ -158,7 +166,7 @@ void main() {
     }
   }
   vVisible = visible;
-  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+  vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
   float persp = uSizeScale * uPixelRatio / max(-mvPosition.z, 0.05);
   gl_PointSize = clamp(sizeFactor * persp, 1.0, 220.0);
   // A culled galaxy can NOT be hidden with gl_PointSize = 0.0: WebGL clamps
@@ -222,6 +230,7 @@ async function loadData() {
       magWISE: new Float32Array(b64ToBuf(d.mag_wise_b64)),
       magSPX: new Float32Array(b64ToBuf(d.mag_spx_b64)),
       redshift: new Float32Array(b64ToBuf(d.redshift_b64)),
+      distReal: d.dist_real_b64 ? new Float32Array(b64ToBuf(d.dist_real_b64)) : null,
       atlasUrl: d.atlas_data_uri,
     };
   }
@@ -240,7 +249,11 @@ async function loadData() {
     fetchOrThrow('data/manifest.json', 'json'),
     fetchOrThrow('data/rings.json', 'json'),
   ]);
-  const [posBuf, colBuf, sizeBuf, tileBuf, magLSSTBuf, magWISEBuf, magSPXBuf, redshiftBuf] = await Promise.all([
+  // dist_real.bin is optional (older builds lack it): without it the
+  // peculiar-velocity toggle is disabled rather than the page failing.
+  const distRealP = manifest.has_dist_real
+    ? fetchOrThrow('data/dist_real.bin').catch(() => null) : Promise.resolve(null);
+  const [posBuf, colBuf, sizeBuf, tileBuf, magLSSTBuf, magWISEBuf, magSPXBuf, redshiftBuf, distRealBuf] = await Promise.all([
     fetchOrThrow('data/pos.bin'),
     fetchOrThrow('data/col.bin'),
     fetchOrThrow('data/size.bin'),
@@ -249,6 +262,7 @@ async function loadData() {
     fetchOrThrow('data/mag_wise.bin'),
     fetchOrThrow('data/mag_spx.bin'),
     fetchOrThrow('data/redshift.bin'),
+    distRealP,
   ]);
   return {
     manifest, rings,
@@ -260,6 +274,7 @@ async function loadData() {
     magWISE: new Float32Array(magWISEBuf),
     magSPX: new Float32Array(magSPXBuf),
     redshift: new Float32Array(redshiftBuf),
+    distReal: distRealBuf ? new Float32Array(distRealBuf) : null,
     atlasUrl: 'data/atlas.png',
   };
 }
@@ -269,7 +284,7 @@ async function main() {
   const statusEl = document.getElementById('loading');
   const canvas = document.getElementById('c');
 
-  const { manifest, rings, pos, col, size, tileF32, magLSST, magWISE, magSPX, redshift, atlasUrl } = await loadData();
+  const { manifest, rings, pos, col, size, tileF32, magLSST, magWISE, magSPX, redshift, distReal, atlasUrl } = await loadData();
 
   // Fallback in case a stale cached manifest.json without a "telescopes"
   // key ever slips past the no-cache fetch above -- these are the same
@@ -284,7 +299,7 @@ async function main() {
   const n = pos.length / 3;
   for (const [name, arr, stride] of [['aColor', col, 3], ['aSize', size, 1], ['aTile', tileF32, 1],
       ['aMagLSST', magLSST, 1], ['aMagWISE', magWISE, 1], ['aMagSPX', magSPX, 1],
-      ['aRedshift', redshift, 1]]) {
+      ['aRedshift', redshift, 1], ...(distReal ? [['aDistReal', distReal, 1]] : [])]) {
     if (arr.length !== n * stride) {
       throw new Error(`${name} has ${arr.length} values, expected ${n * stride} (n=${n}) -- ` +
         'a data file is stale or corrupt; try a hard refresh (Ctrl/Cmd+Shift+R)');
@@ -338,6 +353,11 @@ async function main() {
   geo.setAttribute('aMagWISE', new THREE.BufferAttribute(magWISE, 1));
   geo.setAttribute('aMagSPX', new THREE.BufferAttribute(magSPX, 1));
   geo.setAttribute('aRedshift', new THREE.BufferAttribute(redshift, 1));
+  // fallback when dist_real.bin is absent: the observed radius itself, so the
+  // shader is well-defined and the toggle is simply disabled below
+  const distRealAttr = distReal || Float32Array.from({ length: n }, (_, i) =>
+    Math.hypot(pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]));
+  geo.setAttribute('aDistReal', new THREE.BufferAttribute(distRealAttr, 1));
 
   const atlasTex = new THREE.TextureLoader().load(atlasUrl);
   atlasTex.generateMipmaps = false;
@@ -363,6 +383,8 @@ async function main() {
       uDepthWISE: { value: manifest.telescopes.WISE.depth },
       uDepthSPX: { value: manifest.telescopes.SPHEREx.depth },
       uZMax: { value: zDefault },
+      uDistMax: { value: distAtZ(zDefault) },
+      uRSD: { value: 1.0 },
     },
     vertexShader: VERT,
     fragmentShader: FRAG,
@@ -526,6 +548,21 @@ async function main() {
   const TELESCOPE_IDS = { all: 0, LSST: 1, WISE: 2, SPHEREx: 3 };
   let currentTelescope = 'all';
   let currentZMax = material.uniforms.uZMax.value;
+  let rsdOn = true;
+  // world position of galaxy i under the current peculiar-velocity setting
+  // (shared with the inspector so its hover/selection rings track the points)
+  function posOf(i, out) {
+    out.set(pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]);
+    if (!rsdOn) out.normalize().multiplyScalar(distRealAttr[i]);
+    return out;
+  }
+  const rsdChk = document.getElementById('rsd-chk');
+  if (!distReal) { rsdChk.checked = true; rsdChk.disabled = true; rsdChk.parentElement.title = 'this build has no real-space radii'; }
+  rsdChk.addEventListener('change', (e) => {
+    rsdOn = e.target.checked;
+    material.uniforms.uRSD.value = rsdOn ? 1.0 : 0.0;
+    refreshStats();
+  });
 
   function countVisible() {
     const mag = currentTelescope === 'all' ? null
@@ -533,8 +570,9 @@ async function main() {
       : currentTelescope === 'WISE' ? magWISE : magSPX;
     const depth = currentTelescope === 'all' ? 0 : manifest.telescopes[currentTelescope].depth;
     let count = 0;
+    const cutDist = distAtZ(currentZMax);
     for (let i = 0; i < n; i++) {
-      if (redshift[i] > currentZMax) continue;
+      if (rsdOn ? redshift[i] > currentZMax : distRealAttr[i] > cutDist) continue;
       if (mag && mag[i] >= depth) continue;
       count++;
     }
@@ -548,6 +586,7 @@ async function main() {
   function refreshStats() {
     const visible = countVisible();
     const cutDist = distAtZ(currentZMax);
+    material.uniforms.uDistMax.value = cutDist;
     setFrameDistance(cutDist);
     nCountEl.textContent = visible.toLocaleString();
     zRangeEl.textContent = currentZMax.toFixed(2);
@@ -634,7 +673,7 @@ async function main() {
   // Click a SPHEREx-detectable galaxy -> detail panel (inspect.js). A click
   // is a pointerdown/up pair that barely moved, so orbit drags never pick.
   const inspector = await setupInspector(THREE, {
-    renderer, camera, geo, mainMaterial: material, manifest, hud, distAtZ, tileF32, colArr: col,
+    renderer, camera, geo, mainMaterial: material, manifest, hud, distAtZ, tileF32, colArr: col, posOf,
   });
   if (inspector) {
     document.getElementById('pick-hint').classList.remove('hidden');

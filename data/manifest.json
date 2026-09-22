@@ -39,6 +39,8 @@
   ],
   "dist_min_mpc": 6.423273187898363,
   "dist_max_mpc": 8223.800495483967,
+  "has_dist_real": true,
+  "dist_real_note": "dist_real.bin = comoving distance at the cosmological redshift (peculiar velocity removed, pecZ convention)",
   "cosmology": "FlatLambdaCDM(H0=67.77, Om0=0.307115)",
   "mean_dir_radec": [
     258.28543853759766,
@@ -880,5 +882,5 @@
       8223.8
     ]
   },
-  "generated": "2026-09-09"
+  "generated": "2026-09-21"
 }
