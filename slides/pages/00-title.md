@@ -7,7 +7,7 @@ kicker: SPHEREx cosmology mocks · LastJourney / HACC
 Part 1: how the mock is built, from the N-body run to 159-band photometry.
 Part 2: what the final dataset contains, and how it compares with data.
 
-Nesar Ramachandra · Argonne National Laboratory · October 2026
+Argonne National Laboratory · October 2026
 
 ???
 Speaker notes go after a line with three question marks; they are not shown on the slide.

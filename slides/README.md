@@ -43,6 +43,7 @@ To add a slide: create `pages/NN-name.md`, add its file name to `slides.json`. T
 | `fig_matching.py` | `matching_*` (UM/SMDPL pool + patch 3) |
 | `run_c3k.sh fig_sed_physics.py --compute`, then `python fig_sed_physics.py` | `sed_*` (production painter chain, FSPS-C3K) |
 | `fig_filters.py` | `filters_all` |
+| `money_plot/make_money_plot_v2.py --patch 6 --slide` | `money_plot_patch6.jpg` (slide 2) |
 | `aggregate_reports.py`, then `fig_validation.py` | `val_*` (all 19 patch reports combined) |
 
 `lastjourney_heitmann21.jpg` is Fig. 1 of Heitmann et al. 2021; `lightcone_schematic_korytov19.png` is from Korytov et al. 2019.
