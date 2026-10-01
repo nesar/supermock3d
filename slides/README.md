@@ -50,4 +50,5 @@ To add a slide: create `pages/NN-name.md`, add its file name to `slides.json`. T
 ## Viewing
 
 Arrow keys / space / PageUp-Down, Home/End, `o` overview, `f` fullscreen, swipe on touch screens; the URL hash is the slide number (`#12`). Print from the browser (landscape, no margins, background graphics on) for a PDF with one slide per page.
+The repo root has `.nojekyll` so Pages serves the `.md` files as-is (Jekyll would convert them to `.html`); keep it.
 Local preview: `python3 -m http.server` in `docs/` and open `http://localhost:8000/slides/` (opening the file directly does not work, the pages are fetched).
