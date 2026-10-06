@@ -196,7 +196,12 @@ export async function setupInspector(THREE, ctx) {
   });
   const pickScene = new THREE.Scene();
   pickScene.add(new THREE.Points(geo, pickMaterial));
-  const WIN = 32;
+  // Pick window in device pixels around the pointer. A fingertip is far less
+  // precise than a mouse, so touch devices search a wider window and give
+  // each candidate a slightly larger minimum footprint.
+  const coarse = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  const WIN = coarse ? Math.min(96, Math.round(28 * renderer.getPixelRatio())) : 32;
+  if (coarse) pickMaterial.uniforms.uMinPx.value = 5 * renderer.getPixelRatio();
   const pickTarget = new THREE.WebGLRenderTarget(WIN, WIN, {
     minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: true, stencilBuffer: false,
   });
@@ -280,6 +285,7 @@ export async function setupInspector(THREE, ctx) {
     document.getElementById('info-panel').classList.add('hidden');
     panel.classList.remove('hidden');
     panel.querySelector('.detail-title').textContent = `galaxy #${idx.toLocaleString()}`;
+    panel.querySelector('.detail-sub').textContent = 'SPHEREx-detectable · catalog record';
     panel.querySelector('.detail-body').innerHTML = '<div class="detail-loading">loading catalog record…</div>';
     try {
       const [rec, filters] = await Promise.all([fetchRecord(idx), loadFilters()]);
@@ -306,6 +312,9 @@ export async function setupInspector(THREE, ctx) {
     body.innerHTML = '';
     const z = s.redshift;
     const dC = distAtZ(z);
+    // one-line summary in the header, so a minimised panel still says what it is
+    panel.querySelector('.detail-sub').innerHTML =
+      `z = ${fmt.z(z)} · M<sub>★</sub> = ${fmt.logm(s.log_mstar)} M<sub>☉</sub> · SPHEREx-detectable`;
     const dA = dC / (1 + z);
     const isCentral = s.central > 0.5;
     const tObs = ageAtZ(z);

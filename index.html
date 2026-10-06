@@ -67,11 +67,8 @@
   #telescope-spec { margin-top: 9px; font-family: var(--mono); font-size: 11px; color: var(--dim);
                      white-space: nowrap; }
 
-  #info-btn { position: absolute; top: 16px; right: 16px; font-family: var(--display); font-weight: 600;
-              letter-spacing: 0.3px; background: #161b2c; color: var(--ink); border: 1px solid var(--edge);
-              border-radius: 3px; padding: 8px 14px; font-size: 12.5px; cursor: pointer; }
-  #info-btn:hover { border-color: var(--teal); }
-  #info-panel { position: absolute; top: 58px; right: 16px; max-width: 380px; font-size: 12.5px; line-height: 1.55; }
+  #info-panel { position: absolute; top: 58px; right: 16px; max-width: 380px; font-size: 12.5px; line-height: 1.55;
+                max-height: calc(100vh - 80px); overflow-y: auto; }
   #info-panel h2 { margin: 0 0 9px; font-family: var(--display); font-size: 14px; font-weight: 600; }
   #info-panel ul { margin: 6px 0 0; padding-left: 18px; }
   #info-panel li { margin-bottom: 7px; }
@@ -132,6 +129,81 @@
              background: var(--void); color: var(--ink); font-family: var(--display); font-weight: 600;
              font-size: 16px; letter-spacing: 0.4px; z-index: 10; text-align: center; padding: 20px; }
 
+  /* ---- collapsible panels (all screen sizes) ---- */
+  .phead { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  #hud .collapse-btn, #hud .min-btn { flex: none; background: none; border: 1px solid var(--edge); color: var(--dim);
+                            border-radius: 3px; font-size: 11px; line-height: 1; padding: 4px 7px; cursor: pointer; }
+  #hud .collapse-btn:hover, #hud .min-btn:hover { color: var(--ink); border-color: var(--teal); background: none; }
+  .collapse-btn::before { content: '▾'; }
+  .collapsed > .phead .collapse-btn::before { content: '▸'; }
+  .collapsed > .pbody { display: none; }
+  #title-block .phead h1 { flex: 1; }
+  #title-block.collapsed .phead h1 { margin: 0; font-size: 15px; }
+  #controls .phead { margin-bottom: 9px; align-items: center; }
+  #controls .phead h2 { margin: 0; }
+  #controls.collapsed .phead { margin-bottom: 0; }
+  #left-dock.dock-collapsed #help { display: none; }
+  #telescope-panel .phead { align-items: stretch; }
+  #detail-panel .head-btns { display: flex; gap: 5px; flex: none; }
+  #hud #detail-panel .min-btn { font-size: 13px; padding: 3px 7px; }
+  #detail-panel .min-btn::before { content: '▾'; }
+  #detail-panel.min .min-btn::before { content: '▴'; }
+  #detail-panel.min .detail-body { display: none; }
+  #detail-panel.min .detail-head { margin-bottom: 0; border-bottom: none; padding-bottom: 0; }
+  #top-right { position: absolute; top: 16px; right: 16px; display: flex; gap: 8px; pointer-events: none; }
+  #top-right button { font-family: var(--display); font-weight: 600; letter-spacing: 0.3px; background: #161b2c;
+                      color: var(--ink); border: 1px solid var(--edge); border-radius: 3px; padding: 8px 14px;
+                      font-size: 12.5px; cursor: pointer; }
+  #top-right button:hover { border-color: var(--teal); }
+  #ui-btn { padding-left: 11px !important; padding-right: 11px !important; }
+  /* "hide panels": everything but this button (and an open galaxy panel) goes away */
+  #hud.ui-hidden #title-block, #hud.ui-hidden #telescope-panel, #hud.ui-hidden #left-dock,
+  #hud.ui-hidden #info-btn, #hud.ui-hidden #info-panel { display: none !important; }
+  #hud.ui-hidden #ui-btn { opacity: 0.55; }
+
+  /* ---- compact layout: phones, small tablets, short landscape windows ----
+     Same page, same features: the telescope switch becomes a full-width top
+     bar, the title and the controls shrink to tappable chips (collapsed by
+     default, see setupChrome() in app.js), and the galaxy panel turns into a
+     bottom sheet (or a side sheet in short landscape) that can be minimised. */
+  @media (max-width: 900px), (max-height: 620px) {
+    #hud .panel { padding: 9px 11px; }
+    #telescope-panel { top: 8px; left: 8px; right: 8px; transform: none; }
+    #telescope-panel .phead { gap: 5px; }
+    #telescope-switch { flex: 1; gap: 4px; }
+    #telescope-switch button { flex: 1; padding: 8px 2px; font-size: 11.5px; letter-spacing: 0; white-space: nowrap; }
+    #telescope-spec { white-space: normal; font-size: 10px; line-height: 1.4; margin-top: 7px; }
+    #top-right { top: calc(var(--tbar-h, 52px) + 8px); right: 8px; gap: 6px; }
+    #top-right button { padding: 7px 10px; }
+    #info-btn .lbl { display: none; }
+    #title-block { top: calc(var(--tbar-h, 52px) + 8px); left: 8px; width: auto; max-width: calc(100vw - 122px);
+                   max-height: calc(100vh - var(--tbar-h, 52px) - var(--sheet-h, 0px) - 80px);
+                   max-height: calc(100dvh - var(--tbar-h, 52px) - var(--sheet-h, 0px) - 80px); overflow-y: auto; }
+    #title-block h1 { font-size: 15px; }
+    #title-block.collapsed .phead h1 { font-size: 12.5px; }
+    #info-panel { top: calc(var(--tbar-h, 52px) + 52px); left: 8px; right: 8px; max-width: none;
+                  max-height: calc(100vh - var(--tbar-h, 52px) - 64px);
+                  max-height: calc(100dvh - var(--tbar-h, 52px) - 64px); overflow-y: auto; }
+    #left-dock { left: 8px; bottom: calc(var(--sheet-h, 0px) + 8px); width: min(232px, calc(100vw - 16px));
+                 max-height: calc(100vh - var(--tbar-h, 52px) - var(--sheet-h, 0px) - 64px);
+                 max-height: calc(100dvh - var(--tbar-h, 52px) - var(--sheet-h, 0px) - 64px); overflow-y: auto; }
+    #left-dock.dock-collapsed { width: auto; }
+    #controls input[type="range"] { min-height: 24px; }
+    #controls label { min-height: 24px; }
+  }
+  /* galaxy panel as a bottom sheet (portrait phones / tablets) */
+  @media (max-width: 900px) and (min-height: 621px), (max-width: 639px) {
+    #hud #detail-panel { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-width: none;
+                    max-height: 48vh; max-height: 48dvh; border-radius: 10px 10px 0 0;
+                    border-left: none; border-right: none; border-bottom: none; }
+  }
+  /* ... or a side sheet when the window is short but wide (landscape phones) */
+  @media (max-height: 620px) and (min-width: 640px) {
+    #hud #detail-panel { top: calc(var(--tbar-h, 52px) + 52px); right: 8px; bottom: 8px; width: min(400px, 48vw);
+                    max-height: none; }
+    #hud #detail-panel.min { bottom: auto; }
+  }
+
   .hidden { display: none !important; }
 </style>
 </head>
@@ -144,8 +216,10 @@
 <div id="select-ring" class="hidden"></div>
 
 <div id="hud">
-  <div id="title-block" class="panel">
-    <h1>The SuperMock synthetic sky from HACC</h1>
+  <div id="title-block" class="panel collapsible" data-panel="title">
+    <div class="phead"><h1>The SuperMock synthetic sky from HACC</h1>
+      <button class="collapse-btn" aria-label="collapse or expand this panel"></button></div>
+    <div class="pbody">
     <p>An interactive 3D flythrough of the Supermock-v3 galaxy dataset based on the
        Hardware/Hybrid Accelerated Cosmology Code (HACC)-LastJourney dark matter simulation
        and galaxy-painting pipeline created for SPHEREx analysis.</p>
@@ -155,19 +229,24 @@
       <span><b id="d-range">–</b></span>
       <span>logM<sub>*</sub> &gt; <b id="m-min">–</b></span>
     </div>
+    </div>
   </div>
 
-  <div id="telescope-panel" class="panel">
-    <div id="telescope-switch">
+  <div id="telescope-panel" class="panel collapsible" data-panel="telescope">
+    <div class="phead"><div id="telescope-switch">
       <button data-scope="all">ALL GALAXIES</button>
       <button data-scope="LSST">LSST</button>
       <button data-scope="WISE">WISE</button>
       <button data-scope="SPHEREx">SPHEREx</button>
     </div>
-    <div id="telescope-spec">–</div>
+      <button class="collapse-btn" aria-label="collapse or expand the survey details"></button></div>
+    <div class="pbody"><div id="telescope-spec">–</div></div>
   </div>
 
-  <button id="info-btn" class="panel">ⓘ about this view</button>
+  <div id="top-right">
+    <button id="ui-btn" class="panel" title="hide / show all panels (H)" aria-label="hide or show all panels">◱</button>
+    <button id="info-btn" class="panel" aria-label="about this view">ⓘ<span class="lbl"> about this view</span></button>
+  </div>
   <div id="info-panel" class="panel hidden">
     <h2>About this view</h2>
     <ul>
@@ -207,14 +286,17 @@
         <div class="detail-title">galaxy</div>
         <div class="detail-sub">SPHEREx-detectable · catalog record</div>
       </div>
-      <button class="close-btn" title="close (Esc)">✕</button>
+      <div class="head-btns"><button class="min-btn" title="minimise / expand" aria-label="minimise or expand"></button>
+        <button class="close-btn" title="close (Esc)" aria-label="close">✕</button></div>
     </div>
     <div class="detail-body"></div>
   </div>
 
   <div id="left-dock">
-  <div id="controls" class="panel">
-    <h2>view controls</h2>
+  <div id="controls" class="panel collapsible" data-panel="controls">
+    <div class="phead"><h2>view controls</h2>
+      <button class="collapse-btn" aria-label="collapse or expand the view controls"></button></div>
+    <div class="pbody">
     <div class="row row--buttons"><button id="reset-btn">reset view</button>
       <button id="observer-btn" title="look out at the sky from the Milky Way">observer view</button></div>
     <div class="row"><label><input type="checkbox" id="rotate-chk"> auto-rotate</label>
@@ -228,6 +310,7 @@
     <div class="row"><label title="on: galaxies at their observed redshift (catalog value, peculiar velocity included) -- clusters stretch along the line of sight into 'fingers of god'; off: real-space positions at the cosmological redshift"><input type="checkbox" id="rsd-chk" checked> peculiar velocities (RSD)</label></div>
     <div class="row"><label><input type="checkbox" id="rings-chk"> distance rings</label></div>
     <div class="row"><label><input type="checkbox" id="labels-chk"> coordinate labels</label></div>
+    </div>
   </div>
 
   <div id="help" class="panel">

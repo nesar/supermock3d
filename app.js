@@ -280,6 +280,80 @@ async function loadData() {
 }
 
 // ---------------------------------------------------------------- main --
+// ------------------------------------------------------------ page chrome
+// One responsive page for every device. Each panel can be collapsed to its
+// header; on a compact viewport (phone, small tablet, short landscape
+// window -- the same media query as the CSS) they START collapsed so the
+// galaxies own the screen, on a wide one they start open. A choice the
+// viewer makes is remembered per layout. "Hide panels" (button or H) clears
+// everything but that button and an open galaxy panel. Runs before the data
+// loads so the layout is right from the first paint.
+function setupChrome() {
+  const hud = document.getElementById('hud');
+  const compactMq = window.matchMedia('(max-width: 900px), (max-height: 620px)');
+  const sheetMq = window.matchMedia('(max-width: 900px) and (min-height: 621px), (max-width: 639px)');
+  const store = {
+    get(k) { try { return window.localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { window.localStorage.setItem(k, v); } catch { /* private mode: just don't persist */ } },
+  };
+  const key = (name) => `supermock-ui:${compactMq.matches ? 'compact' : 'wide'}:${name}`;
+  const panels = [...document.querySelectorAll('.collapsible')];
+  const dock = document.getElementById('left-dock');
+  function apply(panel, collapsed) {
+    panel.classList.toggle('collapsed', collapsed);
+    const btn = panel.querySelector('.collapse-btn');
+    if (btn) btn.setAttribute('aria-expanded', String(!collapsed));
+    if (panel.id === 'controls') dock.classList.toggle('dock-collapsed', collapsed);
+  }
+  function applyDefaults() {
+    for (const panel of panels) {
+      const saved = store.get(key(panel.dataset.panel));
+      apply(panel, saved === null ? compactMq.matches : saved === '1');
+    }
+  }
+  for (const panel of panels) {
+    panel.querySelector('.collapse-btn').addEventListener('click', () => {
+      const collapsed = !panel.classList.contains('collapsed');
+      apply(panel, collapsed);
+      store.set(key(panel.dataset.panel), collapsed ? '1' : '0');
+    });
+  }
+  applyDefaults();
+  const onMq = () => { applyDefaults(); measure(); };
+  if (compactMq.addEventListener) compactMq.addEventListener('change', onMq); else compactMq.addListener(onMq);
+
+  // hide / show everything
+  const uiBtn = document.getElementById('ui-btn');
+  const toggleUi = () => { hud.classList.toggle('ui-hidden'); measure(); };
+  uiBtn.addEventListener('click', toggleUi);
+  window.addEventListener('keydown', (e) => {
+    if ((e.key === 'h' || e.key === 'H') && !e.ctrlKey && !e.metaKey && !e.altKey) toggleUi();
+  });
+
+  // galaxy panel: minimise to its header
+  const detail = document.getElementById('detail-panel');
+  detail.querySelector('.min-btn').addEventListener('click', () => { detail.classList.toggle('min'); measure(); });
+
+  // CSS needs two live sizes: the top bar's height (compact layout stacks
+  // the title chip and buttons under it) and the bottom sheet's height (the
+  // controls chip floats above it).
+  const tele = document.getElementById('telescope-panel');
+  function measure() {
+    const tb = tele.offsetHeight;                       // 0 when panels are hidden
+    hud.style.setProperty('--tbar-h', `${tb ? tb + 8 : 0}px`);
+    const sheet = sheetMq.matches && !detail.classList.contains('hidden') ? detail.offsetHeight : 0;
+    hud.style.setProperty('--sheet-h', `${sheet}px`);
+  }
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(measure);
+    ro.observe(tele); ro.observe(detail);
+  }
+  new MutationObserver(measure).observe(detail, { attributes: true, attributeFilter: ['class'] });
+  window.addEventListener('resize', measure);
+  measure();
+}
+setupChrome();
+
 async function main() {
   const statusEl = document.getElementById('loading');
   const canvas = document.getElementById('c');
