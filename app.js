@@ -701,13 +701,113 @@ async function main() {
 
   statusEl.classList.add('hidden');
 
+  // -------------------------------------------------------------- flyby
+  // A free drift through the galaxy field: the camera chases a sequence of
+  // random waypoints (positions of drawn galaxies inside the current depth
+  // cut, so it always stays where the data is, whatever the footprint), with
+  // a twice-low-passed heading so turns are gradual, a look direction that
+  // wanders around the heading, and a slow continuous roll. Speed scales
+  // with distance from the observer (slow through the dense nearby web,
+  // faster across the sparse far field). Any drag, scroll or view button
+  // ends it and hands the exact camera position back to the orbit controls.
+  const flyby = (() => {
+    const p = new THREE.Vector3(), h = new THREE.Vector3(), want = new THREE.Vector3();
+    const wp = new THREE.Vector3(), up = new THREE.Vector3(), look = new THREE.Vector3();
+    const right = new THREE.Vector3(), tmpV = new THREE.Vector3();
+    const chk = document.getElementById('flyby-chk');
+    let active = false, t = 0, wpAge = 0;
+    // smooth pseudo-random signals in [-1, 1]: three incommensurate sines each
+    const mkNoise = (periods) => {
+      const ph = periods.map(() => Math.random() * Math.PI * 2);
+      return (time) => periods.reduce((a, T, i) => a + Math.sin(2 * Math.PI * time / T + ph[i]), 0) / periods.length;
+    };
+    let nYaw, nPitch, nRoll, nSpeed;
+    function newWaypoint() {
+      for (let k = 0; k < 200; k++) {
+        const i = Math.floor(Math.random() * n);
+        if (redshift[i] > currentZMax) continue;
+        posOf(i, wp);
+        // not behind the camera's back and not right on top of it: keeps turns gentle
+        tmpV.copy(wp).sub(p);
+        const d = tmpV.length();
+        if (d < 0.05 * distAtZ(currentZMax)) continue;
+        if (k < 150 && tmpV.dot(h) < 0) continue;
+        break;
+      }
+      wpAge = 0;
+    }
+    function start() {
+      if (active) return;
+      active = true; t = 0;
+      nYaw = mkNoise([23, 37, 61]); nPitch = mkNoise([29, 43, 71]);
+      nRoll = mkNoise([31, 53, 83]); nSpeed = mkNoise([19, 47, 67]);
+      p.copy(camera.position);
+      camera.getWorldDirection(h);
+      want.copy(h);
+      up.copy(camera.up).addScaledVector(h, -camera.up.dot(h)).normalize();
+      controls.autoRotate = false;
+      document.getElementById('rotate-chk').checked = false;
+      chk.checked = true;
+      newWaypoint();
+    }
+    // handoff = true: keep the camera where it is and resume orbiting around
+    // a point straight ahead; false: a view button is about to set the pose.
+    function stop(handoff = true) {
+      if (!active) return;
+      active = false;
+      chk.checked = false;
+      camera.up.set(0, 1, 0);
+      if (handoff) {
+        const R = Math.max(0.25 * distAtZ(currentZMax), 20);
+        const target = p.clone().addScaledVector(look, R);
+        const off = p.clone().sub(target);
+        controls.setPose(R, Math.atan2(off.x, off.z),
+          THREE.MathUtils.clamp(Math.acos(THREE.MathUtils.clamp(off.y / R, -1, 1)), 0.02, Math.PI - 0.02), target);
+      }
+    }
+    function update(dt) {
+      t += dt; wpAge += dt;
+      const cut = distAtZ(currentZMax);
+      tmpV.copy(wp).sub(p);
+      const dist = tmpV.length();
+      if (dist < 0.2 * wp.length() + 0.01 * cut || wpAge > 45) { newWaypoint(); tmpV.copy(wp).sub(p); }
+      tmpV.normalize();
+      // heading: two cascaded low-pass filters toward the waypoint direction
+      want.lerp(tmpV, Math.min(1, dt * 0.25)).normalize();
+      h.lerp(want, Math.min(1, dt * 0.25)).normalize();
+      const speed = 0.022 * (p.length() + 0.03 * cut) * (1 + 0.35 * nSpeed(t));
+      p.addScaledVector(h, speed * dt);
+      // roll the up vector slowly about the heading, keep it orthogonal
+      up.addScaledVector(h, -up.dot(h)).normalize();
+      up.applyAxisAngle(h, 0.05 * nRoll(t) * dt);
+      right.crossVectors(h, up).normalize();
+      // look direction wanders around the heading (up to ~11 deg yaw, ~8 deg pitch)
+      look.copy(h).addScaledVector(right, Math.tan(0.19 * nYaw(t))).addScaledVector(up, Math.tan(0.14 * nPitch(t))).normalize();
+      camera.position.copy(p);
+      camera.up.copy(up);
+      camera.lookAt(tmpV.copy(p).add(look));
+    }
+    chk.addEventListener('change', (e) => (e.target.checked ? start() : stop(true)));
+    document.getElementById('rotate-chk').addEventListener('change', (e) => { if (e.target.checked) stop(true); });
+    for (const id of ['reset-btn', 'observer-btn']) document.getElementById(id).addEventListener('click', () => stop(false));
+    // a real drag (not a click, so galaxies stay inspectable mid-flight) or a scroll takes over
+    let downAt = null;
+    canvas.addEventListener('pointerdown', (e) => { downAt = { x: e.clientX, y: e.clientY }; });
+    canvas.addEventListener('pointerup', () => { downAt = null; });
+    canvas.addEventListener('pointermove', (e) => {
+      if (active && downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 4) stop(true);
+    });
+    canvas.addEventListener('wheel', () => { if (active) stop(true); }, { passive: true });
+    return { update, get active() { return active; } };
+  })();
+
   // --------------------------------------------------------------- loop
   const projVec = new THREE.Vector3();
   let last = performance.now();
   function frame(now) {
     const dt = Math.min((now - last) / 1000, 0.1);
     last = now;
-    controls.update(dt);
+    if (flyby.active) flyby.update(dt); else controls.update(dt);
 
     projVec.copy(mwMarker.position).project(camera);
     if (projVec.z < 1) {
