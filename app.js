@@ -702,49 +702,114 @@ async function main() {
   statusEl.classList.add('hidden');
 
   // -------------------------------------------------------------- flyby
-  // A free drift through the galaxy field: the camera chases a sequence of
-  // random waypoints (positions of drawn galaxies inside the current depth
-  // cut, so it always stays where the data is, whatever the footprint), with
-  // a twice-low-passed heading so turns are gradual, a look direction that
-  // wanders around the heading, and a slow continuous roll. Speed scales
-  // with distance from the observer (slow through the dense nearby web,
-  // faster across the sparse far field). Any drag, scroll or view button
-  // ends it and hands the exact camera position back to the orbit controls.
+  // A free flight INSIDE the survey volume. It always starts at the observer
+  // (the Milky Way) looking down the most interior sightline, and from then
+  // on the camera position is never allowed outside the coverage: a
+  // gnomonic occupancy map of the drawn galaxies' directions (so it works
+  // for any footprint -- cap, ring segment, band with a hole) gives every
+  // direction its distance to the footprint edge, and the radius is held
+  // inside the current max-redshift cut. A step that would leave is simply
+  // not taken while the heading swings back toward the interior.
+  // The path chases random galaxies as waypoints but aims to one side of
+  // each, so the camera sweeps past it with its gaze locked on (a clear
+  // swing of the view), banks into its turns like an aircraft, and rolls
+  // slowly. Speed scales with distance from the observer. Any drag, scroll
+  // or view button ends it and hands the camera back to the orbit controls.
   const flyby = (() => {
-    const p = new THREE.Vector3(), h = new THREE.Vector3(), want = new THREE.Vector3();
-    const wp = new THREE.Vector3(), up = new THREE.Vector3(), look = new THREE.Vector3();
-    const right = new THREE.Vector3(), tmpV = new THREE.Vector3();
+    const V = () => new THREE.Vector3();
+    const p = V(), h = V(), hPrev = V(), want = V(), wp = V(), aim = V(), gz = V();
+    const look = V(), lookDes = V(), u0 = V(), r0 = V(), upCam = V(), anchorDir = V();
+    const tA = V(), tB = V(), tC = V();
     const chk = document.getElementById('flyby-chk');
-    let active = false, t = 0, wpAge = 0;
-    // smooth pseudo-random signals in [-1, 1]: three incommensurate sines each
+
+    // ---- coverage map (gnomonic about local +Z, the mean line of sight)
+    const G = 96, M_HARD = 1, M_SOFT = 5, M_WP = 9;
+    let ext = 1e-3;
+    for (let i = 0; i < n; i += 7) {
+      const z = pos[3 * i + 2];
+      if (z > 0) ext = Math.max(ext, Math.abs(pos[3 * i] / z), Math.abs(pos[3 * i + 1] / z));
+    }
+    ext = Math.min(ext * 1.06, 5);
+    const cellOf = (x, y, z) => {
+      if (z <= 0) return -1;
+      const cx = Math.floor((x / z / ext * 0.5 + 0.5) * G), cy = Math.floor((y / z / ext * 0.5 + 0.5) * G);
+      return (cx < 0 || cy < 0 || cx >= G || cy >= G) ? -1 : cy * G + cx;
+    };
+    const edge = new Int16Array(G * G);          // 0 = no data; else chamfer distance (cells) to the footprint edge
+    for (let i = 0; i < n; i++) {
+      const c = cellOf(pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]);
+      if (c >= 0) edge[c] = 30000;
+    }
+    for (let pass = 0; pass < 2; pass++) {
+      for (let k = 0; k < G * G; k++) {
+        const c = pass ? G * G - 1 - k : k;
+        if (!edge[c]) continue;
+        const cx = c % G, cy = (c - cx) / G, d = pass ? 1 : -1;
+        const nx = cx + d, ny = cy + d;
+        const a = (nx < 0 || nx >= G) ? 0 : edge[c + d];
+        const b = (ny < 0 || ny >= G) ? 0 : edge[c + d * G];
+        edge[c] = Math.min(edge[c], a + 1, b + 1);
+      }
+    }
+    let deep = 0;
+    for (let c = 1; c < G * G; c++) if (edge[c] > edge[deep]) deep = c;
+    {   // most interior direction: mean of the cells at the maximum edge distance
+      let sx = 0, sy = 0, m = 0;
+      for (let c = 0; c < G * G; c++) if (edge[c] === edge[deep]) { sx += c % G; sy += Math.floor(c / G); m++; }
+      anchorDir.set(((sx / m + 0.5) / G * 2 - 1) * ext, ((sy / m + 0.5) / G * 2 - 1) * ext, 1).normalize();
+    }
+    const margin = (v) => { const c = cellOf(v.x, v.y, v.z); return c < 0 ? 0 : edge[c]; };
+    const inside = (v, m, rFrac, cut) => margin(v) >= m && v.length() <= rFrac * cut;
+
+    let active = false, t = 0, wpAge = 0, bImp = 1, gzB = 1, gzLocked = false, wpFresh = false;
+    let g = 0, bank = 0, avoiding = false;
     const mkNoise = (periods) => {
       const ph = periods.map(() => Math.random() * Math.PI * 2);
-      return (time) => periods.reduce((a, T, i) => a + Math.sin(2 * Math.PI * time / T + ph[i]), 0) / periods.length;
+      return (time) => periods.reduce((acc, T, i) => acc + Math.sin(2 * Math.PI * time / T + ph[i]), 0) / periods.length;
     };
+    const smooth = (e0, e1, x) => { const u = THREE.MathUtils.clamp((x - e0) / (e1 - e0), 0, 1); return u * u * (3 - 2 * u); };
     let nYaw, nPitch, nRoll, nSpeed;
+
     function newWaypoint() {
-      for (let k = 0; k < 200; k++) {
+      const cut = distAtZ(currentZMax);
+      let found = false;
+      for (let k = 0; k < 400 && !found; k++) {
         const i = Math.floor(Math.random() * n);
         if (redshift[i] > currentZMax) continue;
         posOf(i, wp);
-        // not behind the camera's back and not right on top of it: keeps turns gentle
-        tmpV.copy(wp).sub(p);
-        const d = tmpV.length();
-        if (d < 0.05 * distAtZ(currentZMax)) continue;
-        if (k < 150 && tmpV.dot(h) < 0) continue;
-        break;
+        const r = wp.length();
+        if (r < 0.05 * cut || r > 0.88 * cut || margin(wp) < M_WP) continue;
+        tA.copy(wp).sub(p);
+        const d = tA.length();
+        if (d < 0.05 * cut + 0.25 * p.length()) continue;
+        if (k < 250 && tA.dot(h) < -0.3 * d) continue;
+        found = true;
       }
-      wpAge = 0;
+      if (!found) wp.copy(anchorDir).multiplyScalar(0.45 * cut);
+      // aim to one side so the camera sweeps past the galaxy instead of through it
+      tA.copy(wp).sub(p);
+      const d = tA.length();
+      bImp = Math.min((0.13 + 0.12 * Math.random()) * wp.length(), 0.35 * d);
+      tB.crossVectors(tA, u0);
+      if (tB.lengthSq() < 1e-9) tB.set(1, 0, 0);
+      tB.normalize().multiplyScalar(Math.random() < 0.5 ? bImp : -bImp);
+      aim.copy(wp).add(tB);
+      if (!inside(aim, M_SOFT, 0.92, cut)) aim.copy(wp).sub(tB);
+      if (!inside(aim, M_SOFT, 0.92, cut)) { aim.copy(wp); bImp *= 0.5; }
+      wpAge = 0; wpFresh = Math.random() < 0.65;   // gaze-lock on about two passes in three
+      if (gzLocked && g < 0.3) gzLocked = false;
     }
+
     function start() {
       if (active) return;
-      active = true; t = 0;
-      nYaw = mkNoise([23, 37, 61]); nPitch = mkNoise([29, 43, 71]);
-      nRoll = mkNoise([31, 53, 83]); nSpeed = mkNoise([19, 47, 67]);
-      p.copy(camera.position);
-      camera.getWorldDirection(h);
-      want.copy(h);
-      up.copy(camera.up).addScaledVector(h, -camera.up.dot(h)).normalize();
+      active = true; t = 0; g = 0; bank = 0; avoiding = false; gzLocked = false;
+      nYaw = mkNoise([13, 21, 34]); nPitch = mkNoise([17, 27, 44]);
+      nRoll = mkNoise([19, 31, 50]); nSpeed = mkNoise([11, 29, 47]);
+      // observer view: at the Milky Way, looking down the most interior sightline
+      const cut = distAtZ(currentZMax);
+      p.copy(anchorDir).multiplyScalar(Math.max(0.5, 0.0015 * cut));
+      h.copy(anchorDir); hPrev.copy(h); want.copy(h); look.copy(h);
+      u0.set(0, 1, 0).addScaledVector(look, -look.y).normalize();
       controls.autoRotate = false;
       document.getElementById('rotate-chk').checked = false;
       chk.checked = true;
@@ -765,28 +830,74 @@ async function main() {
           THREE.MathUtils.clamp(Math.acos(THREE.MathUtils.clamp(off.y / R, -1, 1)), 0.02, Math.PI - 0.02), target);
       }
     }
+
     function update(dt) {
       t += dt; wpAge += dt;
       const cut = distAtZ(currentZMax);
-      tmpV.copy(wp).sub(p);
-      const dist = tmpV.length();
-      if (dist < 0.2 * wp.length() + 0.01 * cut || wpAge > 45) { newWaypoint(); tmpV.copy(wp).sub(p); }
-      tmpV.normalize();
-      // heading: two cascaded low-pass filters toward the waypoint direction
-      want.lerp(tmpV, Math.min(1, dt * 0.25)).normalize();
-      h.lerp(want, Math.min(1, dt * 0.25)).normalize();
-      const speed = 0.022 * (p.length() + 0.03 * cut) * (1 + 0.35 * nSpeed(t));
-      p.addScaledVector(h, speed * dt);
-      // roll the up vector slowly about the heading, keep it orthogonal
-      up.addScaledVector(h, -up.dot(h)).normalize();
-      up.applyAxisAngle(h, 0.05 * nRoll(t) * dt);
-      right.crossVectors(h, up).normalize();
-      // look direction wanders around the heading (up to ~11 deg yaw, ~8 deg pitch)
-      look.copy(h).addScaledVector(right, Math.tan(0.19 * nYaw(t))).addScaledVector(up, Math.tan(0.14 * nPitch(t))).normalize();
+      const speed = 0.06 * (p.length() + 0.03 * cut) * (1 + 0.4 * nSpeed(t));
+
+      // ---- steering: toward the aim point, or back to the interior near an edge
+      // a waypoint is done once the camera has swept past its aim point (close
+      // AND receding) -- not merely while it is still turning toward a new one
+      tA.copy(aim).sub(p);
+      const dAim = tA.length();
+      if (dAim < 0.6 * bImp + 0.004 * cut || (tA.dot(h) < 0 && dAim < 3 * bImp + 0.01 * cut) || wpAge > 60) {
+        newWaypoint(); tA.copy(aim).sub(p);
+      }
+      tA.normalize();
+      let gain = 0.7;
+      tB.copy(p).addScaledVector(h, speed * 1.2);
+      if (!inside(tB, M_SOFT, 0.94, cut)) {
+        tA.copy(anchorDir).multiplyScalar(THREE.MathUtils.clamp(0.85 * p.length(), 0.08 * cut, 0.6 * cut)).sub(p).normalize();
+        gain = 1.8; avoiding = true;
+      } else if (avoiding) {
+        avoiding = false; newWaypoint(); tA.copy(aim).sub(p).normalize();
+      }
+      hPrev.copy(h);
+      want.lerp(tA, Math.min(1, dt * gain * 1.6)).normalize();
+      h.lerp(want, Math.min(1, dt * gain)).normalize();
+
+      // ---- move, but never out of the coverage (or, if the depth cut just
+      // shrank past the camera, only back toward the interior)
+      tB.copy(p).addScaledVector(h, speed * dt);
+      if (inside(tB, M_HARD, 1.0, cut)) p.copy(tB);
+      else if (!inside(p, M_HARD, 1.0, cut)) {
+        tC.copy(anchorDir).multiplyScalar(Math.min(0.5 * cut, 0.8 * p.length())).sub(p);
+        p.addScaledVector(tC.normalize(), speed * dt);
+      }
+
+      // ---- gaze: lock onto the waypoint galaxy during the pass, then release
+      if (gzLocked) {
+        tC.copy(gz).sub(p);
+        const d = tC.length();
+        if (tC.dot(h) < -0.25 * d) gzLocked = false;
+      } else if (g < 0.05 && wpFresh) { gz.copy(wp); gzB = Math.max(bImp, 1e-3); gzLocked = true; wpFresh = false; }
+      const gT = gzLocked ? 1 - smooth(1.8 * gzB, 3.5 * gzB, tC.copy(gz).sub(p).length()) : 0;
+      g += (gT - g) * Math.min(1, dt * 1.2);
+
+      // ---- camera frame: wandering look, parallel-transported up, roll + bank
+      r0.crossVectors(look, u0).normalize();
+      lookDes.copy(h).addScaledVector(r0, Math.tan(0.25 * nYaw(t))).addScaledVector(u0, Math.tan(0.18 * nPitch(t))).normalize();
+      if (g > 1e-3) {
+        tC.copy(gz).sub(p).normalize();
+        lookDes.multiplyScalar(1 - g).addScaledVector(tC, g);
+        if (lookDes.lengthSq() < 1e-4) lookDes.copy(look); else lookDes.normalize();
+      }
+      // ease toward the desired view, but never faster than ~37 deg/s
+      const ang = look.angleTo(lookDes);
+      if (ang > 1e-5) look.lerp(lookDes, Math.min(ang * Math.min(1, dt * 3), 0.65 * dt) / ang).normalize();
+      tC.copy(u0).addScaledVector(look, -u0.dot(look));
+      if (tC.lengthSq() > 1e-6) u0.copy(tC).normalize();
+      u0.applyAxisAngle(look, 0.12 * nRoll(t) * dt);
+      r0.crossVectors(look, u0).normalize();
+      const aR = dt > 0 ? tC.copy(h).sub(hPrev).dot(r0) / dt : 0;
+      bank += (THREE.MathUtils.clamp(1.5 * aR, -0.75, 0.75) - bank) * Math.min(1, dt * 1.5);
+      upCam.copy(u0).multiplyScalar(Math.cos(bank)).addScaledVector(r0, Math.sin(bank));
       camera.position.copy(p);
-      camera.up.copy(up);
-      camera.lookAt(tmpV.copy(p).add(look));
+      camera.up.copy(upCam);
+      camera.lookAt(tC.copy(p).add(look));
     }
+
     chk.addEventListener('change', (e) => (e.target.checked ? start() : stop(true)));
     document.getElementById('rotate-chk').addEventListener('change', (e) => { if (e.target.checked) stop(true); });
     for (const id of ['reset-btn', 'observer-btn']) document.getElementById(id).addEventListener('click', () => stop(false));
