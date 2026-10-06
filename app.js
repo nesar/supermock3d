@@ -805,11 +805,24 @@ async function main() {
       active = true; t = 0; g = 0; bank = 0; avoiding = false; gzLocked = false;
       nYaw = mkNoise([13, 21, 34]); nPitch = mkNoise([17, 27, 44]);
       nRoll = mkNoise([19, 31, 50]); nSpeed = mkNoise([11, 29, 47]);
-      // observer view: at the Milky Way, looking down the most interior sightline
+      // Start from wherever the camera is if that is inside the survey volume
+      // (same position and view, so the flight simply takes over); otherwise
+      // from the observer: at the Milky Way, looking down the most interior
+      // sightline.
       const cut = distAtZ(currentZMax);
-      p.copy(anchorDir).multiplyScalar(Math.max(0.5, 0.0015 * cut));
-      h.copy(anchorDir); hPrev.copy(h); want.copy(h); look.copy(h);
-      u0.set(0, 1, 0).addScaledVector(look, -look.y).normalize();
+      if (inside(camera.position, M_HARD, 1.0, cut)) {
+        p.copy(camera.position);
+        camera.getWorldDirection(h);
+        u0.copy(camera.up);
+      } else {
+        p.copy(anchorDir).multiplyScalar(Math.max(0.5, 0.0015 * cut));
+        h.copy(anchorDir);
+        u0.set(0, 1, 0);
+      }
+      hPrev.copy(h); want.copy(h); look.copy(h);
+      u0.addScaledVector(look, -u0.dot(look));
+      if (u0.lengthSq() < 1e-6) u0.set(1, 0, 0).addScaledVector(look, -look.x);
+      u0.normalize();
       controls.autoRotate = false;
       document.getElementById('rotate-chk').checked = false;
       chk.checked = true;
