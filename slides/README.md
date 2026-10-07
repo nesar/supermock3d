@@ -45,6 +45,9 @@ To add a slide: create `pages/NN-name.md`, add its file name to `slides.json`. T
 | `fig_filters.py` | `filters_all` (reads the pinned filter files in `Mocks_v3/pipeline/data/filters/`) |
 | `money_plot/make_money_plot_v2.py --patch 6 --slide` | `money_plot_patch6.jpg` (slide 2) |
 | `aggregate_reports.py`, then `fig_validation.py` | `val_*` (all 19 patch reports combined) |
+| `fig_pools.py` | `matching_pools` (the three UM pools + patch-3 cores) |
+| `run_c3k.sh fig_metallicity_data.py` | `sed_metallicity_data` (EAGLE points + the relation used) |
+| `run_c3k.sh fig_calibration.py` | `calib_colours`, `calib_wise_counts`, `calib_red_blue` (patch-4 calibration library re-attenuated with each dust model) |
 
 `lastjourney_heitmann21.jpg` is Fig. 1 of Heitmann et al. 2021; `lightcone_schematic_korytov19.png` is from Korytov et al. 2019.
 
