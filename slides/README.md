@@ -1,7 +1,7 @@
 # SuperMock v3 slides
 
 Served at `<site>/slides/` (GitHub Pages, same repo as the 3D flythrough; the two pages do not link to each other).
-One Markdown file per slide in `pages/`; `slides.json` sets the order. `index.html` + `assets/deck.{js,css}` render them in the browser; there is no build step.
+One Markdown file per slide in `pages/`; `slides.json` sets the order. The text follows the same style as `Mocks_v3/documentation/`: short sentences, plain words, a terms slide (`03-terms.md`) instead of undefined jargon; every number on a slide is checked against the production files (last check: 7 October 2026). `index.html` + `assets/deck.{js,css}` render them in the browser; there is no build step.
 
 ## Editing a slide
 
@@ -41,8 +41,8 @@ To add a slide: create `pages/NN-name.md`, add its file name to `slides.json`. T
 | `fig_footprint.py` | `footprint_mollweide` |
 | `fig_cores.py` | `cores_*` (patch-3 catalog) |
 | `fig_matching.py` | `matching_*` (UM/SMDPL pool + patch 3) |
-| `run_c3k.sh fig_sed_physics.py --compute`, then `python fig_sed_physics.py` | `sed_*` (production painter chain, FSPS-C3K) |
-| `fig_filters.py` | `filters_all` |
+| `run_c3k.sh fig_sed_physics.py --compute` once, then `run_c3k.sh fig_sed_physics.py` | `sed_*` (production painter chain, FSPS-C3K), including `sed_dust_curve` and `sed_dust_av_history` |
+| `fig_filters.py` | `filters_all` (reads the pinned filter files in `Mocks_v3/pipeline/data/filters/`) |
 | `money_plot/make_money_plot_v2.py --patch 6 --slide` | `money_plot_patch6.jpg` (slide 2) |
 | `aggregate_reports.py`, then `fig_validation.py` | `val_*` (all 19 patch reports combined) |
 

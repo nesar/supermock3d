@@ -2,8 +2,8 @@
 layout: wide-figure
 part: Part 2 · Dataset
 ---
-# Example painted SEDs
+# Example painted spectra
 
 ![example SEDs](figs/val_example_seds.png)
 
-Caption: Painted SEDs from patch 0 (full-resolution reference copy) with their SPHEREx channel photometry (black dots). Nebular lines are at FSPS resolution; at $z \approx 1$–2 Hα, [O III] and Paschen lines fall in individual SPHEREx channels and visibly raise them above the continuum. The mid-IR is the DL07 re-emission.
+Caption: Spectra from patch 0 (the full-resolution reference copy) with their SPHEREx channel photometry (black dots). Gas lines are at the resolution of the stellar library. At $z \approx 1$ to 2, Hα, [O III] and the Paschen lines fall in single SPHEREx channels and raise them above the continuum. The mid-infrared is the dust re-emission.

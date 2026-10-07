@@ -4,16 +4,19 @@ part: Part 1 · Dust calibration
 ---
 # Dust calibration: the one tuned step
 
-**Objective** (lower is better), evaluated on a dustless library of galaxies drawn from a lightcone patch itself (volume weighted, painter-identical chain), re-attenuated for each trial parameter set:
+The fit compares the mock with three sets of data. One score adds the three parts. The fit changes all dust parameters at the same time to make the score as small as possible.
 
-1. SDSS ($z$ < 0.4) and DEEP2 ($z$ < 1.4): 1-D Wasserstein distances of $u-g$, $g-i$, $r-i$, $i-z$ per redshift bin, inside each survey's magnitude window, after adding per-object errors resampled from the survey.
-2. WISE × SuperCOSMOS photo-$z$ galaxies: W1−W2 and W2−W3 per redshift bin (W3−W4 excluded: the W4 requirement makes that sample W4-flux-limited and AGN-biased).
-3. **Absolute counts**: mean |log N$_{\rm mock}(r)$ − log N$_{\rm LF}(r)$| for 15 < $r$ < 19.5, with N$_{\rm LF}$ from the Blanton+03 $^{0.1}r$ luminosity function over the same volume.
-
-| version (July 2026) | dustless library | outcome |
+| part | data | what is compared |
 |---|---|---|
-| v2: colours + WISE | training-set SFHs | $b$ = 0.57, $e$ = 0.17: $A_i$ up to 1.8 mag on massive quiescent galaxies, ~5× deficit of bright galaxies |
-| v3: + count term | patch-30 count library | count term 0.42 → 0.07 dex; mass and sSFR slopes go to ~0 |
-| v4: patch-native | patch 32, then patch 4 | production: $\tau_V = 0.41(1+z)^{0.58}$, Calzetti-like curve |
+| optical colours | SDSS ($z$ < 0.4), DEEP2 ($z$ < 1.4) | histograms of $u-g$, $g-i$, $r-i$, $i-z$ in redshift bins, inside each survey's magnitude window, with the survey's own errors added to the mock |
+| infrared colours | WISE galaxies with SuperCOSMOS redshifts (4,300 galaxies, $z$ < 0.35) | histograms of W1−W2 and W2−W3 in redshift bins. W3−W4 is not used: that sample needs a W4 detection and so prefers warm, AGN-like galaxies. |
+| bright-galaxy counts | the $r$-band luminosity function of Blanton et al. (2003) | galaxies per deg² in each magnitude bin, 15 < $r$ < 19.5 |
 
-<p class="note">The colour terms alone prefer dusty massive galaxies to redden the red sequence; the counts show that this removes bright galaxies that are observed. With both terms the data do not support a mass or sSFR dependence of $\tau_V$ in this model.</p>
+<div class="small">
+
+- **Galaxies.** 250,000 galaxies from one mock patch ($z$ < 1.5), weighted to represent the whole patch. Their dust-free spectra are made once. Each trial of the parameters re-applies the dust in milliseconds.
+- **WISE table.** W3 and W4 need the infrared emission, which is slower. Before the fit we tabulate the WISE magnitudes of 3,000 galaxies at 15 dust amounts with the painter's own code. The fit reads this table.
+- **Two solutions.** The score has two low regions: little dust dependence on mass (good), or much more dust in massive galaxies (bad). A downhill fit from the default start found the bad one twice. The fit now starts from three points and keeps the best.
+- Production model: fitted on patch 4, frozen on 22 July 2026. See `Mocks_v3/documentation/DUST_MODEL.md`.
+
+</div>

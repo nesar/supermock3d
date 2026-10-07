@@ -11,9 +11,9 @@ part: Part 2 · Dataset
 <div><b>159</b><span>AB bands per galaxy</span></div>
 </div>
 
-Per galaxy: RA, Dec, $z_{\rm obs}$ (with peculiar velocity), comoving position and velocity, central / satellite / merged flag, own and host mass histories (101 outputs), matched SFH (117 bins), $M_*$ at $a$ = 1 and at $z_{\rm obs}$, full SED, 159 magnitudes, rest-frame SDSS and WISE absolute magnitudes, $L_{\rm bol}$.
+Per galaxy: RA, Dec, $z_{\rm obs}$ (with peculiar velocity), comoving position and velocity, central / satellite / merged flag, own and host mass histories (101 outputs), matched SFH (117 bins), $M_*$ today and at $z_{\rm obs}$, the full spectrum, 159 magnitudes, rest-frame SDSS and WISE absolute magnitudes, $L_{\rm bol}$.
 
-| surface density (mean of 19 patches) | deg⁻² | patch rms |
+| galaxies per deg² (mean of 19 patches) | deg⁻² | patch rms |
 |---|---|---|
 | LSST $i$ < 25.3 | 70,200 | 0.4% |
 | SDSS-like $i$ < 22.2 | 16,600 | 0.9% |
@@ -25,4 +25,4 @@ Per galaxy: RA, Dec, $z_{\rm obs}$ (with peculiar velocity), comoving position a
 
 ![n(z)](figs/val_nz.png)
 
-Caption: Left: d$N$/d$z$ per deg² for all galaxies and for the loose observational cut used in all validation panels. Right: class fractions in the cut sample; satellites and merged cores vanish above $z \approx 3.8$.
+Caption: Left: galaxies per deg² and unit redshift, for all galaxies and for the cut sample used in all validation plots. Right: class fractions in the cut sample. Satellites and merged cores are gone above $z \approx 3.8$.
